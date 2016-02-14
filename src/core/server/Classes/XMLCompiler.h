@@ -6,12 +6,41 @@
 @class ClientForKernelspace;
 
 @interface XMLCompilerItem : NSObject
+@property(readonly) NSNumber* id;
+@end
+
+@interface CheckboxItem : XMLCompilerItem
 - (NSString*)getName;
+- (NSString*)getStyle;
+- (NSString*)getIdentifier;
+- (NSUInteger)getChildrenCount;
+- (BOOL)needsShowCheckbox;
+- (BOOL)isNameMatched:(NSString*)string;
+@end
+
+@interface ParameterItem : XMLCompilerItem
+- (NSString*)getName;
+- (NSString*)getIdentifier;
+- (NSInteger)getDefaultValue;
+- (NSInteger)getStep;
+- (NSString*)getBaseUnit;
+- (NSUInteger)getChildrenCount;
+@end
+
+@interface XMLCompilerTree : NSObject
+@property XMLCompilerItem* node;
+@property NSArray* children;
+
+- (CheckboxItem*)castNodeToCheckboxItem;
+- (ParameterItem*)castNodeToParameterItem;
 @end
 
 @interface XMLCompiler : NSObject {
   IBOutlet ClientForKernelspace* clientForKernelspace_;
 }
+
+@property XMLCompilerTree* preferencepane_checkbox;
+@property XMLCompilerTree* preferencepane_parameter;
 
 + (NSString*)get_private_xml_path;
 
@@ -38,9 +67,5 @@
 - (NSString*)url:(uint32_t)keycode;
 - (NSString*)urlType:(uint32_t)keycode;
 - (BOOL)urlIsBackground:(uint32_t)keycode;
-
-- (NSMutableArray*)preferencepane_checkbox;
-- (NSMutableArray*)preferencepane_number;
-- (NSString*)preferencepane_error_message;
 
 @end

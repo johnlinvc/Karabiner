@@ -33,7 +33,7 @@ public:
       // traverse
       if (it.get_tag_name() == "item") {
         assert(preferences_node_tree_);
-        std::shared_ptr<preferences_node_tree_t> ptr(new preferences_node_tree_t(preferences_node_tree_->get_node()));
+        std::shared_ptr<preferences_node_tree_t> ptr(new preferences_node_tree_t());
         assert(ptr);
 
         auto saved_preferences_node_tree = preferences_node_tree_;
@@ -47,6 +47,7 @@ public:
 
         auto attr_hidden = it.get_optional("<xmlattr>.hidden");
         if (!attr_hidden) {
+          ptr->trim_name();
           preferences_node_tree_->push_back(ptr);
         }
 

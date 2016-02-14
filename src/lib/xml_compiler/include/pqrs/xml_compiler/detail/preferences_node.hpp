@@ -12,6 +12,8 @@ public:
   int get_default_value(void) const { return default_value_; }
   const std::string& get_style(void) const { return style_; }
 
+  void trim_name(void) { boost::trim(name_); }
+
 protected:
   bool handle_name_and_appendix_(const extracted_ptree::node& it);
 
@@ -23,21 +25,12 @@ protected:
 
 class preferences_checkbox_node final : public preferences_node {
 public:
-  preferences_checkbox_node(void) {}
-  preferences_checkbox_node(const preferences_checkbox_node& parent_node) : name_for_filter_(parent_node.name_for_filter_ + " ") {}
-
   void handle_item_child(const extracted_ptree::node& it);
-
-  const std::string& get_name_for_filter(void) const { return name_for_filter_; }
-
-private:
-  std::string name_for_filter_;
 };
 
 class preferences_number_node final : public preferences_node {
 public:
   preferences_number_node(void) : step_(1) {}
-  preferences_number_node(const preferences_number_node& /*parent_node*/) : preferences_number_node() {}
 
   void handle_item_child(const extracted_ptree::node& it);
 
@@ -66,6 +59,9 @@ public:
   }
   void handle_item_child(const extracted_ptree::node& it) {
     node_.handle_item_child(it);
+  }
+  void trim_name() {
+    node_.trim_name();
   }
 
   const T& get_node(void) const { return node_; }

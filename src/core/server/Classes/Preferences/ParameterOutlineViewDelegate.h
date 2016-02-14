@@ -4,12 +4,9 @@
 
 @class PreferencesManager;
 
-@interface CheckboxOutlineViewDelegate : NSObject <NSOutlineViewDelegate>
+@interface ParameterOutlineViewDelegate : NSObject <NSOutlineViewDelegate>
 
 @property(weak) IBOutlet NSOutlineView* outlineView;
 @property(weak) IBOutlet PreferencesManager* preferencesManager;
-
-- (void)updateFont;
-- (void)clearHeightCache;
 
 @end

@@ -33,12 +33,14 @@
     kStatusWindowPosition : @3, // Bottom right
     kIsAXNotifierEnabled : @YES,
     kAXNotifierDisabledInJavaApps : @YES,
+    kAXNotifierDisabledInQtApps : @YES,
     kAXNotifierDisabledInPreview : @YES,
     kAXNotifierDisabledInMicrosoftOffice : @YES,
     kUsePreparedSettings : @YES,
     kIsMigratedIsOverwriteKeyRepeat : @NO,
     kIsOverwriteKeyRepeat : @NO,
     kShowIconInDock : @NO,
+    kKarabinerPreferencesCheckboxFont : @0,
   };
   [[NSUserDefaults standardUserDefaults] registerDefaults:dict];
 }

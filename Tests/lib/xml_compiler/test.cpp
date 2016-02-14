@@ -456,7 +456,7 @@ TEST(pqrs_xml_compiler, reload) {
   EXPECT_TRUE(node_tree.get_children() != nullptr);
   {
     auto node_ptr = (*(node_tree.get_children()))[0];
-    EXPECT_EQ("Swap Space and Tab\n  appendix1\n  appendix123\n  appendix123_2", node_ptr->get_node().get_name());
+    EXPECT_EQ("Swap Space and Tab\n  appendix1\n\n  appendix123\n  appendix123_2", node_ptr->get_node().get_name());
   }
   {
     auto node_ptr = (*(node_tree.get_children()))[1];
@@ -636,12 +636,20 @@ TEST(pqrs_xml_compiler, reload_bindings_clang) {
   }
 
   {
-    const char* expect = "style test: important";
-
     size_t indexes[] = {1};
-    const char* actual = pqrs_xml_compiler_get_preferences_checkbox_node_tree_name(p, indexes, sizeof(indexes) / sizeof(indexes[0]));
-
-    EXPECT_EQ(std::string(expect), std::string(actual));
+    {
+      const char* expect = "style test: important";
+      const char* actual = pqrs_xml_compiler_get_preferences_checkbox_node_tree_name(p, indexes, sizeof(indexes) / sizeof(indexes[0]));
+      EXPECT_EQ(std::string(expect), std::string(actual));
+    }
+    {
+      bool actual = pqrs_xml_compiler_is_preferences_checkbox_node_tree_name_icontains(p, indexes, sizeof(indexes) / sizeof(indexes[0]), "Test");
+      EXPECT_TRUE(actual);
+    }
+    {
+      bool actual = pqrs_xml_compiler_is_preferences_checkbox_node_tree_name_icontains(p, indexes, sizeof(indexes) / sizeof(indexes[0]), "Test2");
+      EXPECT_FALSE(actual);
+    }
   }
 
   pqrs_xml_compiler_terminate(&p);

@@ -49,7 +49,7 @@
 @interface CheckboxOutlineViewDataSource ()
 @property(weak) IBOutlet PreferencesManager* preferencesManager;
 @property(weak) IBOutlet XMLCompiler* xmlCompiler;
-@property NSMutableArray* dataSource;
+@property XMLCompilerTree* dataSource;
 @property FilterCondition* filterCondition;
 @end
 
@@ -64,36 +64,70 @@
   }
 
   if (!self.dataSource) {
-    self.dataSource = [self.xmlCompiler preferencepane_checkbox];
+    self.dataSource = self.xmlCompiler.preferencepane_checkbox;
     self.filterCondition = nil;
   }
 }
 
-- (NSDictionary*)filterDataSource_core:(NSDictionary*)dictionary isEnabledOnly:(BOOL)isEnabledOnly strings:(NSArray*)strings {
+- (XMLCompilerTree*)filterDataSource_core:(XMLCompilerTree*)tree isEnabledOnly:(BOOL)isEnabledOnly strings:(NSArray*)strings {
+  // check strings
+  BOOL stringsMatched = YES;
+  if (strings) {
+    // Remove matched strings from strings for children.
+    //
+    // For example:
+    //   strings == @[@"Emacs", @"Mode", @"Tab"]
+    //
+    //   * Emacs Mode
+    //     * Control+I to Tab
+    //
+    //   notMatchedStrings == @[@"Tab"] at "Emacs Mode".
+    //   Then "Control+I to Tab" will be matched by strings == @[@"Tab"].
+
+    NSMutableArray* notMatchedStrings = nil;
+    for (NSString* s in strings) {
+      CheckboxItem* checkboxItem = [tree castNodeToCheckboxItem];
+      if (![checkboxItem isNameMatched:s]) {
+        stringsMatched = NO;
+      } else {
+        if (!notMatchedStrings) {
+          notMatchedStrings = [NSMutableArray arrayWithArray:strings];
+        }
+        [notMatchedStrings removeObject:s];
+      }
+    }
+
+    if (notMatchedStrings) {
+      strings = notMatchedStrings;
+    }
+  }
+
   // ------------------------------------------------------------
   // check children
-  NSArray* children = dictionary[@"children"];
-  if (children) {
+  XMLCompilerTree* newtree = [XMLCompilerTree new];
+  newtree.node = tree.node;
+
+  if (tree.children) {
     NSMutableArray* newchildren = [NSMutableArray new];
-    for (NSDictionary* dict in children) {
-      NSDictionary* d = [self filterDataSource_core:dict isEnabledOnly:isEnabledOnly strings:strings];
-      if (d) {
-        [newchildren addObject:d];
+    for (XMLCompilerTree* child in tree.children) {
+      XMLCompilerTree* t = [self filterDataSource_core:child isEnabledOnly:isEnabledOnly strings:strings];
+      if (t) {
+        [newchildren addObject:t];
       }
     }
 
     if ([newchildren count] > 0) {
-      NSMutableDictionary* newdictionary = [NSMutableDictionary dictionaryWithDictionary:dictionary];
-      newdictionary[@"children"] = newchildren;
-      return newdictionary;
+      newtree.children = newchildren;
+      return newtree;
     }
   }
 
   // ------------------------------------------------------------
   // filter by isEnabledOnly
   if (isEnabledOnly) {
-    NSString* identifier = dictionary[@"identifier"];
-    if (!identifier) {
+    CheckboxItem* checkboxItem = [tree castNodeToCheckboxItem];
+    NSString* identifier = [checkboxItem getIdentifier];
+    if ([identifier length] == 0) {
       return nil;
     }
     if (![self.preferencesManager value:identifier]) {
@@ -101,19 +135,12 @@
     }
   }
 
-  // check self name
-  NSString* string_for_filter = dictionary[@"string_for_filter"];
-  if (string_for_filter) {
-    BOOL hit = YES;
-    for (NSString* s in strings) {
-      if ([string_for_filter rangeOfString:s].location == NSNotFound) hit = NO;
-    }
-    if (hit) {
-      return dictionary;
-    }
+  // check strings
+  if (!stringsMatched) {
+    return nil;
   }
 
-  return nil;
+  return newtree;
 }
 
 // return YES if we need to call [NSOutlineView reloadData]
@@ -133,19 +160,15 @@
   if (string) {
     for (NSString* s in [string componentsSeparatedByCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]) {
       if ([s length] == 0) continue;
-      [strings addObject:[s lowercaseString]];
+      [strings addObject:s];
     }
   }
 
   if (isEnabledOnly || [strings count] > 0) {
-    NSMutableArray* newdatasource = [NSMutableArray new];
-    for (NSDictionary* dict in self.dataSource) {
-      NSDictionary* d = [self filterDataSource_core:dict isEnabledOnly:isEnabledOnly strings:strings];
-      if (d) {
-        [newdatasource addObject:d];
-      }
+    XMLCompilerTree* newdatasource = [self filterDataSource_core:self.dataSource isEnabledOnly:isEnabledOnly strings:strings];
+    if (!newdatasource) {
+      newdatasource = [XMLCompilerTree new];
     }
-
     self.dataSource = newdatasource;
   }
 
@@ -156,7 +179,8 @@
 - (NSInteger)outlineView:(NSOutlineView*)outlineView numberOfChildrenOfItem:(id)item {
   [self load:NO];
 
-  return item ? [item[@"children"] count] : [self.dataSource count];
+  XMLCompilerTree* tree = (XMLCompilerTree*)(item);
+  return tree ? [tree.children count] : [self.dataSource.children count];
 }
 
 - (void)clearFilterCondition {
@@ -167,29 +191,17 @@
   [self load:NO];
 
   // ----------------------------------------
-  NSMutableArray* a = nil;
-
-  // root object
-  if (!item) {
-    a = self.dataSource;
-  } else {
-    a = item[@"children"];
-  }
+  XMLCompilerTree* tree = (XMLCompilerTree*)(item);
+  NSArray* a = tree ? tree.children : self.dataSource.children;
 
   if ((NSUInteger)(index) >= [a count]) return nil;
   return a[index];
 }
 
 - (BOOL)outlineView:(NSOutlineView*)outlineView isItemExpandable:(id)item {
-  return [item[@"children"] count] > 0;
-}
-
-+ (BOOL)isCheckbox:(NSString*)identifier {
-  if (!identifier ||
-      [identifier hasPrefix:@"notsave."]) {
-    return NO;
-  }
-  return YES;
+  XMLCompilerTree* tree = (XMLCompilerTree*)(item);
+  NSArray* a = tree ? tree.children : self.dataSource.children;
+  return [a count] > 0;
 }
 
 @end

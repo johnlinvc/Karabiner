@@ -125,6 +125,14 @@ observerCallback(AXObserverRef observer, AXUIElementRef element, CFStringRef not
       }
     }
 
+    // Qt apps will be crashed if observe.
+    if ([preferences[kAXNotifierDisabledInQtApps] boolValue]) {
+      if ([[[runningApplication bundleIdentifier] lowercaseString] hasPrefix:@"com.buhldata."] ||
+          false) {
+        observable = NO;
+      }
+    }
+
     // Preview.app will be slow when opening large pdf if Preview.app is observed.
     // eg. http://web.mit.edu/rsi/www/pdfs/beamer-tutorial.pdf
     if ([preferences[kAXNotifierDisabledInPreview] boolValue]) {

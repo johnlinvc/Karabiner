@@ -1,6 +1,7 @@
 /* -*- Mode: objc; Coding: utf-8; indent-tabs-mode: nil; -*- */
 
 #import "CheckboxOutlineViewDataSource.h"
+#import "CheckboxOutlineViewDelegate.h"
 #import "ClientForKernelspace.h"
 #import "NotificationKeys.h"
 #import "ParameterOutlineViewDataSource.h"
@@ -14,9 +15,11 @@
 
 @interface PreferencesController ()
 @property(weak) IBOutlet CheckboxOutlineViewDataSource* checkboxOutlineViewDataSource;
+@property(weak) IBOutlet CheckboxOutlineViewDelegate* checkboxOutlineViewDelegate;
 @property(weak) IBOutlet NSOutlineView* checkboxOutlineView;
 @property(weak) IBOutlet NSOutlineView* parameterOutlineView;
 @property(weak) IBOutlet NSSearchField* checkboxSearchText;
+@property(weak) IBOutlet NSSegmentedControl* checkboxFontSegmentedControl;
 @property(weak) IBOutlet ParameterOutlineViewDataSource* parameterOutlineViewDataSource;
 @property NSTimer* resizeTimer;
 @end
@@ -47,6 +50,7 @@
     [self.checkboxOutlineViewDataSource load:YES];
     [self.parameterOutlineViewDataSource load:YES];
 
+    [self.checkboxOutlineViewDelegate clearHeightCache];
     [self.checkboxOutlineViewDataSource clearFilterCondition];
     [self filterCheckboxOutlineView:self];
 
@@ -107,26 +111,29 @@
   // So, we skip this calculation if the preferences window was invisible.
   if (![preferencesWindow_ isVisible]) return;
 
-  int count = [self enabled_count:[xmlCompiler_ preferencepane_checkbox]
+  int count = [self enabled_count:xmlCompiler_.preferencepane_checkbox
                           changed:[preferencesManager_ changed]];
 
   [checkbox_showEnabledOnly_ setTitle:[NSString stringWithFormat:@"show enabled only (%d %@)", count, count >= 2 ? @"items" : @"item"]];
 }
 
 /* ---------------------------------------------------------------------- */
-- (int)enabled_count:(NSArray*)checkbox changed:(NSDictionary*)changed {
+- (int)enabled_count:(XMLCompilerTree*)tree changed:(NSDictionary*)changed {
   int count = 0;
 
-  if (checkbox) {
-    for (NSDictionary* dict in checkbox) {
-      NSString* identifier = dict[@"identifier"];
-      if (identifier) {
-        if ([changed[identifier] intValue] != 0) {
-          ++count;
-        }
+  if (tree) {
+    CheckboxItem* checkboxItem = [tree castNodeToCheckboxItem];
+    NSString* identifier = [checkboxItem getIdentifier];
+    if ([identifier length] > 0) {
+      if ([changed[identifier] intValue] != 0) {
+        ++count;
       }
+    }
 
-      count += [self enabled_count:dict[@"children"] changed:changed];
+    if (tree.children) {
+      for (XMLCompilerTree* child in tree.children) {
+        count += [self enabled_count:child changed:changed];
+      }
     }
   }
 
@@ -167,6 +174,7 @@
 
 - (void)reloadCheckboxOutlineView:(NSTimer*)timer {
   dispatch_async(dispatch_get_main_queue(), ^{
+    [self.checkboxOutlineViewDelegate clearHeightCache];
     [self.checkboxOutlineView reloadData];
   });
 }
@@ -207,6 +215,12 @@
 
 - (IBAction)collapseCheckboxOutlineView:(id)sender {
   [self.checkboxOutlineView collapseItem:nil collapseChildren:YES];
+}
+
+- (IBAction)setCheckboxOutlineViewFont:(id)sender {
+  [self.checkboxOutlineViewDelegate updateFont];
+  [self.checkboxOutlineViewDelegate clearHeightCache];
+  [self.checkboxOutlineView reloadData];
 }
 
 - (IBAction)expandParameterOutlineView:(id)sender {

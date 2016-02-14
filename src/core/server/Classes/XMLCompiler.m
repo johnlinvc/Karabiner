@@ -6,34 +6,51 @@
 #import "XMLCompiler.h"
 #include "pqrs/xml_compiler_bindings_clang.h"
 
+static NSInteger xmlCompilerItemId_;
+static dispatch_queue_t xmlCompilerItemIdQueue_;
+
 @interface XMLCompilerItem ()
 @property pqrs_xml_compiler* pqrs_xml_compiler;
 @property size_t* indexes;
 @property size_t indexes_size;
-@property NSString* alternativeName;
 @end
 
 @implementation XMLCompilerItem
-- (instancetype)initWithParent:(pqrs_xml_compiler*)pqrs_xml_compiler parent:(XMLCompilerItem*)parent index:(size_t)index {
+
++ (void)initialize {
+  xmlCompilerItemId_ = 0;
+  xmlCompilerItemIdQueue_ = dispatch_queue_create("org.pqrs.Karabiner.XMLCompiler.xmlCompilerItemIdQueue_", NULL);
+}
+
+- (instancetype)init {
   self = [super init];
+
+  if (self) {
+    dispatch_sync(xmlCompilerItemIdQueue_, ^{
+      ++xmlCompilerItemId_;
+      _id = @(xmlCompilerItemId_);
+    });
+  }
+
+  return self;
+}
+
+- (instancetype)initWithParent:(pqrs_xml_compiler*)pqrs_xml_compiler parent:(XMLCompilerItem*)parent index:(size_t)index {
+  self = [self init];
 
   if (self) {
     self.pqrs_xml_compiler = pqrs_xml_compiler;
 
-    if (parent) {
-      self.indexes_size = parent.indexes_size + 1;
+    if (!parent) {
+      self.indexes_size = 0;
     } else {
-      self.indexes_size = 1;
+      self.indexes_size = parent.indexes_size + 1;
+      self.indexes = (size_t*)malloc(sizeof(size_t) * self.indexes_size);
+      if (parent.indexes_size > 0) {
+        memcpy(self.indexes, parent.indexes, sizeof(self.indexes[0]) * parent.indexes_size);
+      }
+      self.indexes[self.indexes_size - 1] = index;
     }
-
-    self.indexes = (size_t*)malloc(sizeof(size_t) * self.indexes_size);
-
-    if (parent) {
-      memcpy(self.indexes, parent.indexes, sizeof(self.indexes[0]) * parent.indexes_size);
-    }
-    self.indexes[self.indexes_size - 1] = index;
-
-    self.alternativeName = @"";
   }
 
   return self;
@@ -46,24 +63,120 @@
   }
 }
 
-- (NSString*)getName {
-  if (!self.pqrs_xml_compiler) {
-    return self.alternativeName;
-  }
+@end
 
-  const char* name = pqrs_xml_compiler_get_preferences_checkbox_node_tree_name(self.pqrs_xml_compiler, self.indexes, self.indexes_size);
-  if (!name) {
-    return @"";
-  }
-  return @(name);
+@implementation CheckboxItem
+
+- (NSString*)getName {
+  const char* value = pqrs_xml_compiler_get_preferences_checkbox_node_tree_name(self.pqrs_xml_compiler, self.indexes, self.indexes_size);
+  return value ? @(value) : @"";
 }
+
+- (NSString*)getStyle {
+  const char* value = pqrs_xml_compiler_get_preferences_checkbox_node_tree_style(self.pqrs_xml_compiler, self.indexes, self.indexes_size);
+  return value ? @(value) : @"";
+}
+
+- (NSString*)getIdentifier {
+  const char* value = pqrs_xml_compiler_get_preferences_checkbox_node_tree_identifier(self.pqrs_xml_compiler, self.indexes, self.indexes_size);
+  return value ? @(value) : @"";
+}
+
+- (NSUInteger)getChildrenCount {
+  return pqrs_xml_compiler_get_preferences_checkbox_node_tree_children_count(self.pqrs_xml_compiler, self.indexes, self.indexes_size);
+}
+
+- (BOOL)needsShowCheckbox {
+  NSString* identifier = [self getIdentifier];
+  if ([identifier length] == 0 ||
+      [identifier hasPrefix:@"notsave."]) {
+    return NO;
+  }
+  return YES;
+}
+
+- (BOOL)isNameMatched:(NSString*)string {
+  if (!string) {
+    return NO;
+  }
+  return pqrs_xml_compiler_is_preferences_checkbox_node_tree_name_icontains(self.pqrs_xml_compiler, self.indexes, self.indexes_size, [string UTF8String]);
+}
+
+@end
+
+@interface CheckboxItemWithStaticData : CheckboxItem
+@property NSString* name;
+@property NSString* style;
+@end
+
+@implementation CheckboxItemWithStaticData
+
+- (NSString*)getName {
+  return self.name ? self.name : @"";
+}
+- (NSString*)getStyle {
+  return self.style ? self.style : @"";
+}
+- (NSString*)getIdentifier {
+  return @"";
+}
+- (NSUInteger)getChildrenCount {
+  return 0;
+}
+- (BOOL)needsShowCheckbox {
+  return NO;
+}
+- (BOOL)isNameMatched:(NSString*)string {
+  return YES;
+}
+
+@end
+
+@implementation ParameterItem
+
+- (NSString*)getName {
+  const char* value = pqrs_xml_compiler_get_preferences_number_node_tree_name(self.pqrs_xml_compiler, self.indexes, self.indexes_size);
+  return value ? @(value) : @"";
+}
+
+- (NSString*)getIdentifier {
+  const char* value = pqrs_xml_compiler_get_preferences_number_node_tree_identifier(self.pqrs_xml_compiler, self.indexes, self.indexes_size);
+  return value ? @(value) : @"";
+}
+
+- (NSInteger)getDefaultValue {
+  return pqrs_xml_compiler_get_preferences_number_node_tree_default_value(self.pqrs_xml_compiler, self.indexes, self.indexes_size);
+}
+
+- (NSInteger)getStep {
+  return pqrs_xml_compiler_get_preferences_number_node_tree_step(self.pqrs_xml_compiler, self.indexes, self.indexes_size);
+}
+
+- (NSString*)getBaseUnit {
+  const char* value = pqrs_xml_compiler_get_preferences_number_node_tree_base_unit(self.pqrs_xml_compiler, self.indexes, self.indexes_size);
+  return value ? @(value) : @"";
+}
+
+- (NSUInteger)getChildrenCount {
+  return pqrs_xml_compiler_get_preferences_number_node_tree_children_count(self.pqrs_xml_compiler, self.indexes, self.indexes_size);
+}
+
+@end
+
+@implementation XMLCompilerTree
+
+- (CheckboxItem*)castNodeToCheckboxItem {
+  return [self.node isKindOfClass:[CheckboxItem class]] ? (CheckboxItem*)(self.node) : nil;
+}
+
+- (ParameterItem*)castNodeToParameterItem {
+  return [self.node isKindOfClass:[ParameterItem class]] ? (ParameterItem*)(self.node) : nil;
+}
+
 @end
 
 @interface XMLCompiler () {
   pqrs_xml_compiler* pqrs_xml_compiler_;
-
-  NSMutableArray* preferencepane_checkbox_;
-  NSMutableArray* preferencepane_number_;
 }
 @end
 
@@ -72,123 +185,73 @@
 // ------------------------------------------------------------
 // private methods
 
-- (NSMutableArray*)build_preferencepane_checkbox:(const pqrs_xml_compiler_preferences_checkbox_node_tree*)node_tree parent:(XMLCompilerItem*)parent {
-  if (!node_tree) return nil;
+- (XMLCompilerTree*)newCautionNode:(NSString*)name {
+  CheckboxItemWithStaticData* checkboxItem = [CheckboxItemWithStaticData new];
+  checkboxItem.name = name;
+  checkboxItem.style = @"caution";
 
-  size_t size = pqrs_xml_compiler_get_preferences_checkbox_node_tree_children_count(node_tree);
-  if (size == 0) return nil;
+  XMLCompilerTree* tree = [XMLCompilerTree new];
+  tree.node = checkboxItem;
 
-  NSMutableArray* array = [NSMutableArray new];
-
-  for (size_t i = 0; i < size; ++i) {
-    const pqrs_xml_compiler_preferences_checkbox_node_tree* child =
-        pqrs_xml_compiler_get_preferences_checkbox_node_tree_child(node_tree, i);
-    if (!child) continue;
-
-    // ----------------------------------------
-    // making dictionary
-    NSMutableDictionary* dict = [NSMutableDictionary new];
-
-    XMLCompilerItem* xmlCompilerItem = [[XMLCompilerItem alloc] initWithParent:pqrs_xml_compiler_ parent:parent index:i];
-    dict[@"xmlCompilerItem"] = xmlCompilerItem;
-
-    {
-      const char* identifier = pqrs_xml_compiler_get_preferences_checkbox_node_tree_identifier(child);
-      if (identifier) {
-        dict[@"identifier"] = @(identifier);
-      }
-    }
-    {
-      const char* name_for_filter = pqrs_xml_compiler_get_preferences_checkbox_node_tree_name_for_filter(child);
-      if (name_for_filter) {
-        dict[@"string_for_filter"] = @(name_for_filter);
-      }
-    }
-    {
-      const char* style = pqrs_xml_compiler_get_preferences_checkbox_node_tree_style(child);
-      if (style) {
-        dict[@"style"] = @(style);
-      }
-    }
-
-    NSMutableArray* a = [self build_preferencepane_checkbox:child parent:xmlCompilerItem];
-    if (a) {
-      dict[@"children"] = a;
-    }
-
-    [array addObject:dict];
-  }
-
-  return array;
+  return tree;
 }
 
-- (void)insert_caution_into_preferencepane_checkbox:(NSString*)message {
-  NSMutableDictionary* dict = [NSMutableDictionary new];
-  XMLCompilerItem* xmlCompilerItem = [[XMLCompilerItem alloc] initWithParent:NULL parent:nil index:0];
-  xmlCompilerItem.alternativeName = [message stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-  dict[@"xmlCompilerItem"] = xmlCompilerItem;
-  dict[@"string_for_filter"] = [message lowercaseString];
-  dict[@"style"] = @("caution");
-
-  [preferencepane_checkbox_ insertObject:dict atIndex:0];
-}
-
-+ (NSMutableArray*)build_preferencepane_number:(const pqrs_xml_compiler_preferences_number_node_tree*)node_tree {
-  if (!node_tree) return nil;
-
-  size_t size = pqrs_xml_compiler_get_preferences_number_node_tree_children_count(node_tree);
+- (NSArray*)build_preferencepane_checkbox:(CheckboxItem*)parent {
+  size_t size = [parent getChildrenCount];
   if (size == 0) return nil;
 
-  NSMutableArray* array = [NSMutableArray new];
+  NSMutableArray* children = [NSMutableArray new];
 
-  for (size_t i = 0; i < size; ++i) {
-    const pqrs_xml_compiler_preferences_number_node_tree* child =
-        pqrs_xml_compiler_get_preferences_number_node_tree_child(node_tree, i);
-    if (!child) continue;
-
-    // ----------------------------------------
-    // making dictionary
-    NSMutableDictionary* dict = [NSMutableDictionary new];
-
+  if (parent.indexes_size == 0) {
+    // Add error messages into root children.
     {
-      const char* name = pqrs_xml_compiler_get_preferences_number_node_tree_name(child);
-      if (name) {
-        dict[@"name"] = @(name);
+      NSString* message = [self preferencepane_error_message];
+      if (message) {
+        [children addObject:[self newCautionNode:message]];
       }
     }
-    {
-      const char* identifier = pqrs_xml_compiler_get_preferences_number_node_tree_identifier(child);
-      if (identifier) {
-        dict[@"identifier"] = @(identifier);
-      }
+    if ([EnvironmentChecker checkDoubleCommand]) {
+      [children addObject:[self newCautionNode:@"A conflicting application is installed: DoubleCommand\n\nKarabiner ignores keyboard devices.\n(You can use Karabiner as a pointing device remapper.)"]];
     }
-    {
-      int default_value = pqrs_xml_compiler_get_preferences_number_node_tree_default_value(child);
-
-      // @(12345) will be @"12,345" in view.
-      // So we return NSString to show numbers without comma.
-      dict[@"default"] = [[NSString alloc] initWithFormat:@"%d", default_value];
+    if ([EnvironmentChecker checkKeyRemap4MacBook]) {
+      [children addObject:[self newCautionNode:@"An old kernel extension has still been loaded. Please restart your system in order to unload it."]];
     }
-    {
-      int step = pqrs_xml_compiler_get_preferences_number_node_tree_step(child);
-      dict[@"step"] = @(step);
+    if ([EnvironmentChecker checkKirgudu]) {
+      [children addObject:[self newCautionNode:@"A conflicting application is installed: Kirgudu\n\nKarabiner ignores keyboard devices.\n(You can use Karabiner as a pointing device remapper.)"]];
     }
-    {
-      const char* base_unit = pqrs_xml_compiler_get_preferences_number_node_tree_base_unit(child);
-      if (base_unit) {
-        dict[@"baseunit"] = @(base_unit);
-      }
+    if ([EnvironmentChecker checkSmoothMouse]) {
+      [children addObject:[self newCautionNode:@"A conflicting application is installed: SmoothMouse\n\nKarabiner ignores pointing devices.\n(You can use Karabiner as a keyboard device remapper.)"]];
     }
-
-    NSMutableArray* a = [self build_preferencepane_number:child];
-    if (a) {
-      dict[@"children"] = a;
-    }
-
-    [array addObject:dict];
   }
 
-  return array;
+  for (size_t i = 0; i < size; ++i) {
+    XMLCompilerTree* child = [XMLCompilerTree new];
+    CheckboxItem* node = [[CheckboxItem alloc] initWithParent:pqrs_xml_compiler_ parent:parent index:i];
+    child.node = node;
+    child.children = [self build_preferencepane_checkbox:node];
+
+    [children addObject:child];
+  }
+
+  return children;
+}
+
+- (NSArray*)build_preferencepane_parameter:(ParameterItem*)parent {
+  size_t size = [parent getChildrenCount];
+  if (size == 0) return nil;
+
+  NSMutableArray* children = [NSMutableArray new];
+
+  for (size_t i = 0; i < size; ++i) {
+    XMLCompilerTree* child = [XMLCompilerTree new];
+    ParameterItem* node = [[ParameterItem alloc] initWithParent:pqrs_xml_compiler_ parent:parent index:i];
+    child.node = node;
+    child.children = [self build_preferencepane_parameter:node];
+
+    [children addObject:child];
+  }
+
+  return children;
 }
 
 // ------------------------------------------------------------
@@ -256,53 +319,40 @@
 
     pqrs_xml_compiler_reload(pqrs_xml_compiler_, checkbox_xml_file_name);
 
-    // build preferencepane_checkbox_
     {
-      const pqrs_xml_compiler_preferences_checkbox_node_tree* node_tree =
-          pqrs_xml_compiler_get_preferences_checkbox_node_tree_root(pqrs_xml_compiler_);
-
-      preferencepane_checkbox_ = [self build_preferencepane_checkbox:node_tree parent:nil];
+      CheckboxItem* root = [[CheckboxItem alloc] initWithParent:pqrs_xml_compiler_ parent:nil index:0];
+      XMLCompilerTree* tree = [XMLCompilerTree new];
+      tree.children = [self build_preferencepane_checkbox:root];
+      self.preferencepane_checkbox = tree;
     }
 
-    // build preferencepane_number_
+    // build preferencepane_parameter
     {
-      const pqrs_xml_compiler_preferences_number_node_tree* node_tree =
-          pqrs_xml_compiler_get_preferences_number_node_tree_root(pqrs_xml_compiler_);
-
-      preferencepane_number_ = [XMLCompiler build_preferencepane_number:node_tree];
+      ParameterItem* root = [[ParameterItem alloc] initWithParent:pqrs_xml_compiler_ parent:nil index:0];
+      XMLCompilerTree* tree = [XMLCompilerTree new];
+      tree.children = [self build_preferencepane_parameter:root];
+      self.preferencepane_parameter = tree;
     }
   }
 
   // ------------------------------------------------------------
-  if (pqrs_xml_compiler_get_error_count(pqrs_xml_compiler_) > 0) {
+  {
     NSString* message = [self preferencepane_error_message];
-    [self insert_caution_into_preferencepane_checkbox:message];
+    if (message) {
+      NSUInteger maxlen = 500;
+      if ([message length] > maxlen) {
+        message = [message substringToIndex:maxlen];
+      }
 
-    NSUInteger maxlen = 500;
-    if ([message length] > maxlen) {
-      message = [message substringToIndex:maxlen];
+      dispatch_async(dispatch_get_main_queue(), ^{
+        NSAlert* alert = [NSAlert new];
+        [alert setMessageText:@"Karabiner Error"];
+        [alert addButtonWithTitle:@"Close"];
+        [alert setInformativeText:message];
+
+        [alert runModal];
+      });
     }
-
-    NSAlert* alert = [NSAlert new];
-    [alert setMessageText:@"Karabiner Error"];
-    [alert addButtonWithTitle:@"Close"];
-    [alert setInformativeText:message];
-
-    [alert runModal];
-  }
-
-  // ------------------------------------------------------------
-  if ([EnvironmentChecker checkDoubleCommand]) {
-    [self insert_caution_into_preferencepane_checkbox:@"A conflicting application is installed: DoubleCommand\n\nKarabiner ignores keyboard devices.\n(You can use Karabiner as a pointing device remapper.)"];
-  }
-  if ([EnvironmentChecker checkKeyRemap4MacBook]) {
-    [self insert_caution_into_preferencepane_checkbox:@"An old kernel extension has still been loaded. Please restart your system in order to unload it."];
-  }
-  if ([EnvironmentChecker checkKirgudu]) {
-    [self insert_caution_into_preferencepane_checkbox:@"A conflicting application is installed: Kirgudu\n\nKarabiner ignores keyboard devices.\n(You can use Karabiner as a pointing device remapper.)"];
-  }
-  if ([EnvironmentChecker checkSmoothMouse]) {
-    [self insert_caution_into_preferencepane_checkbox:@"A conflicting application is installed: SmoothMouse\n\nKarabiner ignores pointing devices.\n(You can use Karabiner as a keyboard device remapper.)"];
   }
 
   // ------------------------------------------------------------
@@ -464,19 +514,6 @@
 - (BOOL)urlIsBackground:(uint32_t)keycode {
   @synchronized(self) {
     return pqrs_xml_compiler_get_url_background(pqrs_xml_compiler_, keycode);
-  }
-}
-
-- (NSMutableArray*)preferencepane_checkbox {
-  @synchronized(self) {
-    return preferencepane_checkbox_;
-  }
-}
-
-- (NSMutableArray*)preferencepane_number;
-{
-  @synchronized(self) {
-    return preferencepane_number_;
   }
 }
 
